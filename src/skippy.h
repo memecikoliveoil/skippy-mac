@@ -266,6 +266,7 @@ typedef struct {
 	bool panel_tinting;
 	bool panel_reserveSpace;
 	int panel_maxThickness;
+	char *panel_passthrough;
 
 	bool panel_show_desktop;
 	bool desktopTinting;
@@ -362,6 +363,7 @@ typedef struct {
 	.panel_tinting = true, \
 	.panel_reserveSpace = true, \
 	.panel_maxThickness = 0, \
+	.panel_passthrough = NULL, \
 \
 	.panel_show_desktop = true, \
 	.desktopTinting = true, \
@@ -396,6 +398,7 @@ typedef struct {
 	int fixes_err_base;
 	int input_ev_base;
 	int input_err_base;
+	int input_opcode;
 
 	int xrandr_err_base;
 	int xrandr_ev_base;

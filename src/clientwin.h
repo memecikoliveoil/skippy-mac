@@ -59,6 +59,8 @@ struct _clientwin_t {
 
 	bool zombie;
 	wintype_t paneltype;
+	/* Real panel left visible and clickable through the main window */
+	bool passthrough;
 	/* XserverRegion repair; */
 	
 	/* These are virtual positions set by the layout routine */

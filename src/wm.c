@@ -1221,3 +1221,33 @@ wid_get_prop_adv(const session_t *ps, Window w, Atom atom, long offset,
     .format = 0
   };
 }
+
+/* Match the WM_CLASS class or instance name of a window against a filter
+ * expression (same syntax as --wm-class). An empty expression never matches.
+ */
+bool
+wm_match_class(session_t *ps, Window wid, const char *expr) {
+	if (!expr || !*expr)
+		return false;
+
+	XClassHint hints = { 0 };
+	if (!XGetClassHint(ps->dpy, wid, &hints))
+		return false;
+
+	match_result_t class_match = match_expr(expr,
+			hints.res_class? hints.res_class: "");
+	match_result_t name_match = match_expr(expr,
+			hints.res_name? hints.res_name: "");
+	match_result_t result = {
+		.has_positive = class_match.has_positive || name_match.has_positive,
+		.positive_match = class_match.positive_match || name_match.positive_match,
+		.negative_match = class_match.negative_match || name_match.negative_match,
+	};
+
+	if (hints.res_name)
+		XFree(hints.res_name);
+	if (hints.res_class)
+		XFree(hints.res_class);
+
+	return match_filter_result(result);
+}

@@ -95,6 +95,7 @@ void wm_set_fullscreen(session_t *ps, Window window,
 		int x, int y, unsigned width, unsigned height);
 
 wintype_t wm_identify_panel(session_t *ps, Window wid);
+bool wm_match_class(session_t *ps, Window wid, const char *expr);
 bool wm_validate_window(session_t *ps, Window wid);
 long wm_get_window_desktop(session_t *ps, Window wid);
 Window wm_get_focused(session_t *ps);

@@ -1392,6 +1392,178 @@ panel_effective_geometry(session_t *ps, ClientWin *cw,
 			*w, *h, *x, *y);
 }
 
+/*
+ * Passthrough panels (e.g. a dock) are not drawn by skippy: cut the whole
+ * panel window out of the main window so the real panel shows, and let
+ * clicks on the panel through to it.
+ */
+static void
+mainwin_cut_passthrough(MainWin *mw) {
+	session_t *ps = mw->ps;
+
+	XShapeCombineMask(ps->dpy, mw->window, ShapeBounding, 0, 0, None, ShapeSet);
+	XShapeCombineMask(ps->dpy, mw->window, ShapeInput, 0, 0, None, ShapeSet);
+
+	{
+		winprop_t prop = wid_get_prop(ps, ps->root, _NET_ACTIVE_WINDOW,
+				1, XA_WINDOW, 32);
+		mw->passthrough_prev_active = winprop_get_int(&prop);
+		free_winprop(&prop);
+	}
+	mw->passthrough_target = None;
+	mw->passthrough_click = false;
+	mw->passthrough_nrects = 0;
+
+	foreach_dlist(mw->panels) {
+		ClientWin *cw = iter->data;
+		if (!cw->passthrough)
+			continue;
+
+		// Show the whole panel window, so nothing it draws (e.g. zoomed
+		// dock icons) is clipped
+		XRectangle shown = {
+			.x = cw->src.x - mw->x, .y = cw->src.y - mw->y,
+			.width = cw->src.width, .height = cw->src.height,
+		};
+		XShapeCombineRectangles(ps->dpy, mw->window, ShapeBounding,
+				0, 0, &shown, 1, ShapeSubtract, Unsorted);
+
+		int px, py, pw, ph;
+		panel_effective_geometry(ps, cw, &px, &py, &pw, &ph);
+
+		// An auto-hidden dock may only take input on a thin strip; let
+		// input through up to maxThickness from the screen edge so it can
+		// slide in
+		int maxsize = ps->o.panel_maxThickness;
+		if (maxsize > 0) {
+			if (pw >= ph && ph < maxsize) {
+				if (py >= mw->y + mw->height / 2)
+					py = py + ph - maxsize;
+				ph = maxsize;
+			}
+			else if (pw < ph && pw < maxsize) {
+				if (px >= mw->x + mw->width / 2)
+					px = px + pw - maxsize;
+				pw = maxsize;
+			}
+		}
+
+		XRectangle rect = {
+			.x = px - mw->x, .y = py - mw->y,
+			.width = pw, .height = ph,
+		};
+		XShapeCombineRectangles(ps->dpy, mw->window, ShapeInput,
+				0, 0, &rect, 1, ShapeSubtract, Unsorted);
+		if (mw->passthrough_nrects < 4) {
+			XRectangle r = { .x = px, .y = py, .width = pw, .height = ph };
+			mw->passthrough_rects[mw->passthrough_nrects++] = r;
+		}
+
+		printfdf(false, "(): passthrough panel %#010lx at %dx%d+%d+%d",
+				cw->wid_client, pw, ph, px, py);
+	}
+}
+
+/* The child of the root window that contains a window (e.g. its WM frame) */
+static Window
+toplevel_of(session_t *ps, Window wid) {
+	while (wid) {
+		Window root_ret, parent = None, *children = NULL;
+		unsigned int n = 0;
+		if (!XQueryTree(ps->dpy, wid, &root_ret, &parent, &children, &n))
+			return None;
+		if (children)
+			XFree(children);
+		if (parent == ps->root || parent == None)
+			return wid;
+		wid = parent;
+	}
+	return None;
+}
+
+/*
+ * Without pseudo-transparency the desktop copy is a separate full-screen
+ * window on the root. Put it right below the passthrough panel, so it hides
+ * the windows behind the panel while the real panel stays on top of it.
+ */
+static void
+passthrough_restack_covers(MainWin *mw) {
+	session_t *ps = mw->ps;
+	if (ps->o.pseudoTrans)
+		return;
+
+	Window panel = None;
+	foreach_dlist(mw->panels) {
+		ClientWin *cw = iter->data;
+		if (cw->passthrough) {
+			panel = toplevel_of(ps, cw->wid_client);
+			break;
+		}
+	}
+	if (!panel)
+		return;
+
+	foreach_dlist(mw->panels) {
+		ClientWin *cover = iter->data;
+		if (cover->paneltype != WINTYPE_DESKTOP)
+			continue;
+		XWindowChanges changes = {
+			.sibling = panel,
+			.stack_mode = Below,
+		};
+		XConfigureWindow(ps->dpy, cover->mini.window,
+				CWSibling | CWStackMode, &changes);
+	}
+}
+
+/* A normal application window, whatever skippy's own filters say */
+static bool
+passthrough_app_window(session_t *ps, Window wid) {
+	char *wm_class = ps->o.wm_class, *wm_title = ps->o.wm_title,
+		 *wm_status = ps->o.wm_status, *desktops = ps->o.desktops;
+	ps->o.wm_class = ps->o.wm_title = ps->o.wm_status = ps->o.desktops = NULL;
+	bool valid = wm_validate_window(ps, wid)
+		&& wm_identify_panel(ps, wid) == WINTYPE_WINDOW;
+
+	// Only normal windows and dialogs, not e.g. a dock's tooltip
+	if (valid) {
+		winprop_t prop = wid_get_prop(ps, wid,
+				XInternAtom(ps->dpy, "_NET_WM_WINDOW_TYPE", False),
+				1, XA_ATOM, 32);
+		if (prop.nitems) {
+			Atom type = (Atom) prop.data32[0];
+			valid = type == XInternAtom(ps->dpy, "_NET_WM_WINDOW_TYPE_NORMAL", False)
+				|| type == XInternAtom(ps->dpy, "_NET_WM_WINDOW_TYPE_DIALOG", False);
+		}
+		free_winprop(&prop);
+	}
+	ps->o.wm_class = wm_class;
+	ps->o.wm_title = wm_title;
+	ps->o.wm_status = wm_status;
+	ps->o.desktops = desktops;
+	return valid;
+}
+
+/* Whether the pointer is on a passthrough panel */
+static bool
+pointer_on_passthrough(MainWin *mw) {
+	session_t *ps = mw->ps;
+	Window root_ret, child_ret;
+	int x, y, wx, wy;
+	unsigned int mask;
+	if (!XQueryPointer(ps->dpy, ps->root, &root_ret, &child_ret,
+				&x, &y, &wx, &wy, &mask))
+		return false;
+
+	for (int i = 0; i < mw->passthrough_nrects; i++) {
+		XRectangle *r = &mw->passthrough_rects[i];
+		if (x >= r->x && x < r->x + r->width
+				&& y >= r->y && y < r->y + r->height)
+			return true;
+	}
+	return false;
+}
+
 static void
 calculatePanelBorders(MainWin *mw, MonitorCoord monitor,
 		int *x1, int *y1, int *x2, int *y2) {
@@ -1822,6 +1994,10 @@ mainloop(session_t *ps, bool activate_on_start) {
 	bool first_animating = false;
 	pid_t trigger_client = 0;
 	bool switchdesktop = false;
+	Window passthrough_raised = None;
+	long passthrough_seen_at = 0;
+	bool passthrough_exit = false;
+	bool passthrough_restack = false;
 
 	ps->o.mode = PROGMODE_EXPOSE;
 
@@ -1869,14 +2045,56 @@ mainloop(session_t *ps, bool activate_on_start) {
 
 			animating = false;
 
+			// Closing after a click on a passthrough panel (e.g. a dock
+			// icon): keep the window the panel activated in front, or leave
+			// the focus to the window manager (e.g. for a launched app),
+			// instead of going back to the window active before skippy
+			if (ps->o.mode != PROGMODE_PAGING && mw->passthrough_click) {
+				Window target = mw->passthrough_target;
+				printfdf(false, "(): closing for a passthrough panel click, "
+						"focusing %#010lx", target);
+				dlist *iter = target? dlist_find(mw->clients,
+						clientwin_cmp_func, (void *) target): NULL;
+				mw->client_to_focus = iter? (ClientWin *) iter->data: NULL;
+				if (target && !mw->client_to_focus)
+					passthrough_raised = target;
+				mw->refocus = false;
+				passthrough_exit = target != None;
+				mw->passthrough_click = false;
+
+				// Bring it forward while skippy still covers the screen, so
+				// it is already in place when skippy disappears
+				if (target) {
+					wm_activate_window(ps, target);
+					XSync(ps->dpy, False);
+				}
+			}
+
 			// Unmap the main window and all clients, to make sure focus doesn't fall out
 			// when we start setting focus on client window
 			mainwin_unmap(mw);
 			foreach_dlist(mw->clientondesktop) { clientwin_unmap((ClientWin *) iter->data); }
 			XSync(ps->dpy, False);
 
+			// After a click on a passthrough panel the window manager may
+			// hand the focus skippy gives up back to the previously active
+			// window: let it settle, then focus the window the panel raised
+			Window passthrough_target = None;
+			if (passthrough_exit) {
+				foreach_dlist(mw->panels) { clientwin_unmap((ClientWin *) iter->data); }
+				XSync(ps->dpy, False);
+				passthrough_exit = false;
+				passthrough_target = passthrough_raised? passthrough_raised:
+					mw->client_to_focus? mw->client_to_focus->wid_client: None;
+			}
+
 			// Focus the client window only after the main window get unmapped and
 			// keyboard gets ungrabbed.
+
+			if (passthrough_raised) {
+				wm_activate_window(ps, passthrough_raised);
+				passthrough_raised = None;
+			}
 
 			int selected = -1;
 			if (mw->client_to_focus && ps->o.mode != PROGMODE_PAGING) {
@@ -1920,6 +2138,22 @@ mainloop(session_t *ps, bool activate_on_start) {
 						wm_set_desktop_ewmh(ps, wm_get_current_desktop(ps));
 					}
 					selected = wm_get_current_desktop(ps);
+				}
+			}
+
+			// The window manager may still hand the focus back to the window
+			// that was active before skippy: keep the panel's choice
+			for (int i = 0; passthrough_target && i < 6; i++) {
+				usleep(100000);
+				winprop_t prop = wid_get_prop(ps, ps->root, _NET_ACTIVE_WINDOW,
+						1, XA_WINDOW, 32);
+				Window active = winprop_get_int(&prop);
+				free_winprop(&prop);
+				if (active != passthrough_target) {
+					printfdf(false, "(): focus went to %#010lx, "
+							"activating %#010lx again", active, passthrough_target);
+					wm_activate_window(ps, passthrough_target);
+					XSync(ps->dpy, False);
 				}
 			}
 
@@ -2081,8 +2315,10 @@ mainloop(session_t *ps, bool activate_on_start) {
 				}
 			}
 			if (starttime < timeslice && timeslice < stabletime) {
-				if (!mw->mapped)
+				if (!mw->mapped) {
+					mainwin_cut_passthrough(mw);
 					mainwin_map(mw);
+				}
 
 				if (first_animating) {
 					foreach_dlist (mw->clientondesktop) {
@@ -2091,8 +2327,10 @@ mainloop(session_t *ps, bool activate_on_start) {
 					}
 					foreach_dlist (mw->panels) {
 						ClientWin *cw = iter->data;
-						clientwin_map(cw);
+						if (!cw->passthrough)
+							clientwin_map(cw);
 					}
+					passthrough_restack_covers(mw);
 
 					first_animating = false;
 				}
@@ -2113,8 +2351,10 @@ mainloop(session_t *ps, bool activate_on_start) {
 				XFlush(ps->dpy);
 			}
 			else if (timeslice >= stabletime) {
-				if (!mw->mapped)
+				if (!mw->mapped) {
+					mainwin_cut_passthrough(mw);
 					mainwin_map(mw);
+				}
 
 				if (first_animating) {
 					foreach_dlist (mw->clientondesktop) {
@@ -2123,8 +2363,10 @@ mainloop(session_t *ps, bool activate_on_start) {
 					}
 					foreach_dlist (mw->panels) {
 						ClientWin *cw = iter->data;
-						clientwin_map(cw);
+						if (!cw->passthrough)
+							clientwin_map(cw);
 					}
+					passthrough_restack_covers(mw);
 
 					first_animating = false;
 				}
@@ -2228,6 +2470,13 @@ mainloop(session_t *ps, bool activate_on_start) {
 			ev_dump(ps, mw, &ev);
 #endif
 			Window wid = ev_window(ps, &ev);
+
+			// While the panel switches windows after a click, keep the ones
+			// the window manager raises hidden behind the desktop copy
+			if (mw && passthrough_seen_at
+					&& ((ev.type == ConfigureNotify && !ev.xconfigure.override_redirect)
+					 || (ev.type == MapNotify && !ev.xmap.override_redirect)))
+				passthrough_restack = true;
 
 			if (mw && MotionNotify == ev.type)
 			{
@@ -2368,6 +2617,51 @@ mainloop(session_t *ps, bool activate_on_start) {
 					}
 				}
 			}
+			else if (mw && ev.type == PropertyNotify
+					&& ev.xproperty.window == ps->root) {
+				// The application window a passthrough panel activates
+				if (ev.xproperty.atom == _NET_ACTIVE_WINDOW && mw->mapped
+						&& mw->passthrough_click && !mw->passthrough_target) {
+					winprop_t prop = wid_get_prop(ps, ps->root,
+							_NET_ACTIVE_WINDOW, 1, XA_WINDOW, 32);
+					Window active = winprop_get_int(&prop);
+					free_winprop(&prop);
+					if (active && active != mw->window
+							&& passthrough_app_window(ps, active)) {
+						printfdf(false, "(): window %#010lx activated "
+								"from a passthrough panel", active);
+						mw->passthrough_target = active;
+					}
+				}
+			}
+#ifdef CFG_XINPUTLIB
+			else if (ev.type == GenericEvent
+					&& ev.xcookie.extension == ps->xinfo.input_opcode) {
+				// Clicks on a passthrough panel go to the panel itself
+				if (XGetEventData(ps->dpy, &ev.xcookie)) {
+					XIRawEvent *raw = ev.xcookie.data;
+					if (mw && mw->mapped && !die && mw->passthrough_nrects
+							&& raw->detail >= 1 && raw->detail <= 3) {
+						// Act on the release, like the panel does: pressing
+						// and holding does nothing, and releasing away from
+						// the panel cancels
+						if (ev.xcookie.evtype == XI_RawButtonPress
+								&& !passthrough_seen_at)
+							mw->passthrough_click = pointer_on_passthrough(mw);
+						else if (ev.xcookie.evtype == XI_RawButtonRelease
+								&& mw->passthrough_click && !passthrough_seen_at) {
+							if (pointer_on_passthrough(mw)) {
+								printfdf(false, "(): click on a passthrough panel");
+								passthrough_seen_at = time_in_millis();
+							}
+							else
+								mw->passthrough_click = false;
+						}
+					}
+					XFreeEventData(ps->dpy, &ev.xcookie);
+				}
+			}
+#endif
 			else if (mw && wid == mw->window && !die) {
 				die = mainwin_handle(mw, &ev);
 			}
@@ -2413,7 +2707,25 @@ mainloop(session_t *ps, bool activate_on_start) {
 			}
 		}
 
-		if (mw && ps->o.enforceFocus) {
+		// A click on a passthrough panel (e.g. a dock icon) raised or opened
+		// an application window: close once the window manager has settled,
+		// as the click would without skippy
+		// Close once the panel activated a window, or shortly after the
+		// click when it did not (e.g. launching an application)
+		if (mw && passthrough_restack) {
+			passthrough_restack_covers(mw);
+			passthrough_restack = false;
+		}
+		if (mw && !die && mw->passthrough_click && passthrough_seen_at
+				&& (mw->passthrough_target
+					|| time_in_millis() - passthrough_seen_at >= 200)) {
+			passthrough_seen_at = 0;
+			die = true;
+		}
+		if (!mw)
+			passthrough_seen_at = 0;
+
+		if (mw && !die && !mw->passthrough_click && ps->o.enforceFocus) {
 			Window focus;
 			int revert;
 			XGetInputFocus(ps->dpy, &focus, &revert);
@@ -2448,7 +2760,8 @@ mainloop(session_t *ps, bool activate_on_start) {
 			}
 
 			foreach_dlist(mw->panels) {
-				clientwin_repair((ClientWin *) iter->data);
+				if (!((ClientWin *) iter->data)->passthrough)
+					clientwin_repair((ClientWin *) iter->data);
 			}
 
 			if (ps->o.mode == PROGMODE_PAGING) {
@@ -2488,6 +2801,13 @@ mainloop(session_t *ps, bool activate_on_start) {
 		}
 		if (animating)
 			timeout = 0;
+		if (passthrough_seen_at) {
+			long left = passthrough_seen_at + 200 - time_in_millis();
+			if (left < 0)
+				left = 0;
+			if (timeout < 0 || left < timeout)
+				timeout = left;
+		}
 		poll(r_fd, (r_fd[1].fd >= 0 ? 2: 1), timeout);
 
 		// Handle daemon commands
@@ -2908,8 +3228,7 @@ init_xexts(session_t *ps) {
 	}
 
 #ifdef CFG_XINPUTLIB
-	int opcode;
-	if (!XQueryExtension(dpy, "XInputExtension", &opcode,
+	if (!XQueryExtension(dpy, "XInputExtension", &ps->xinfo.input_opcode,
 			&ps->xinfo.input_ev_base, &ps->xinfo.input_err_base)) {
 		printfef(true, "(): FATAL: XInput extension not found.");
 		return false;
@@ -3513,6 +3832,13 @@ load_config_file(session_t *ps)
     config_get_bool_wrap(config, "panel", "backgroundTinting", &ps->o.panel_tinting);
     config_get_bool_wrap(config, "panel", "reserveSpace", &ps->o.panel_reserveSpace);
     config_get_int_wrap(config, "panel", "maxThickness", &ps->o.panel_maxThickness, 0, INT_MAX);
+    free(ps->o.panel_passthrough);
+    ps->o.panel_passthrough = NULL;
+    {
+        const char *passthrough = config_get(config, "panel", "passthrough", "");
+        if (passthrough && *passthrough)
+            ps->o.panel_passthrough = mstrdup(passthrough);
+    }
 
     config_get_bool_wrap(config, "desktop", "show", &ps->o.panel_show_desktop);
     config_get_bool_wrap(config, "desktop", "backgroundTinting", &ps->o.desktopTinting);
@@ -3732,7 +4058,29 @@ int main(int argc, char *argv[]) {
 	}
 	ps->mainwin = mw;
 
-	XSelectInput(ps->dpy, ps->root, SubstructureNotifyMask);
+	XSelectInput(ps->dpy, ps->root, SubstructureNotifyMask | PropertyChangeMask);
+
+#ifdef CFG_XINPUTLIB
+	// Raw button events tell clicks on passthrough panels, which go to the
+	// panels, not skippy. XI 2.1+ delivers them even while the panel holds
+	// the implicit grab of its button press.
+	{
+		int major = 2, minor = 2;
+		if (XIQueryVersion(ps->dpy, &major, &minor) == Success
+				&& (major > 2 || minor >= 1)) {
+			unsigned char bits[XIMaskLen(XI_LASTEVENT)] = { 0 };
+			XISetMask(bits, XI_RawButtonPress);
+			XISetMask(bits, XI_RawButtonRelease);
+			XIEventMask mask = {
+				.deviceid = XIAllMasterDevices,
+				.mask_len = sizeof(bits),
+				.mask = bits,
+			};
+			XISelectEvents(ps->dpy, ps->root, &mask, 1);
+		}
+	}
+#endif
+
 
 	// Daemon mode
 	if (ps->o.runAsDaemon) {
@@ -3783,6 +4131,7 @@ main_end:
 			free(ps->o.clientDisplayModes);
 			free(ps->o.highlight_tint);
 			free(ps->o.multiselect_tint);
+			free(ps->o.panel_passthrough);
 			free(ps->o.tooltip_border);
 			free(ps->o.tooltip_background);
 			free(ps->o.tooltip_backgroundHighlight);

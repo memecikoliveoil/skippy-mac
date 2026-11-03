@@ -139,7 +139,9 @@ clientwin_validate_panel(dlist *l, void *data) {
 	ClientWin *cw = l->data;
 	session_t *ps = cw->mainwin->ps;
 	cw->paneltype = wm_identify_panel(ps, cw->wid_client);
-	return cw->paneltype == WINTYPE_PANEL? ps->o.panel_show:
+	cw->passthrough = cw->paneltype == WINTYPE_PANEL
+		&& wm_match_class(ps, cw->wid_client, ps->o.panel_passthrough);
+	return cw->paneltype == WINTYPE_PANEL? (ps->o.panel_show || cw->passthrough):
 			cw->paneltype == WINTYPE_DESKTOP? ps->o.panel_show_desktop:
 			0;
 }

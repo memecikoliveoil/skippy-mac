@@ -79,6 +79,15 @@ struct _mainwin_t {
 	KeyCode *keycodes_Close;
 
 	bool refocus;
+	/* Active window when shown, with a passthrough panel */
+	Window passthrough_prev_active;
+	/* Area of the passthrough panels taking clicks, root coordinates */
+	XRectangle passthrough_rects[4];
+	int passthrough_nrects;
+	/* A button was pressed on a passthrough panel */
+	bool passthrough_click;
+	/* Window the panel activated after the click, from _NET_ACTIVE_WINDOW */
+	Window passthrough_target;
 	bool mapped;
 
 	int nmonitors, active_monitor;

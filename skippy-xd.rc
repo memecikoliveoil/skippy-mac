@@ -146,6 +146,11 @@ backgroundTinting = true
 reserveSpace = true
 # Reserve at most this many pixels per panel (0 = no limit)
 maxThickness = 0
+# Panels whose WM_CLASS matches (same syntax as --wm-class) are left real:
+#   visible and clickable through skippy instead of drawn as a copy.
+#   Works best with pseudoTrans = false.
+#   Use show = false to hide the remaining panels.
+passthrough =
 
 # Windows of type _NET_WM_WINDOW_TYPE_DESKTOP
 [desktop]
