@@ -1562,6 +1562,26 @@ passthrough_app_window(session_t *ps, Window wid) {
 	return valid;
 }
 
+/*
+ * Get skippy out of sight at once on a click on a passthrough panel, so
+ * whatever the window manager does next shows as it would without skippy.
+ * The main window stays mapped, only emptied, to keep the focus: the window
+ * manager then does not hand it to the previously active window.
+ */
+static void
+passthrough_hide(MainWin *mw) {
+	session_t *ps = mw->ps;
+	XShapeCombineRectangles(ps->dpy, mw->window, ShapeBounding,
+			0, 0, NULL, 0, ShapeSet, Unsorted);
+	foreach_dlist(mw->clientondesktop) {
+		clientwin_unmap((ClientWin *) iter->data);
+	}
+	foreach_dlist(mw->panels) {
+		clientwin_unmap((ClientWin *) iter->data);
+	}
+	XFlush(ps->dpy);
+}
+
 /* Whether the pointer is on a passthrough panel */
 static bool
 pointer_on_passthrough(MainWin *mw) {
@@ -2016,7 +2036,6 @@ mainloop(session_t *ps, bool activate_on_start) {
 	Window passthrough_raised = None;
 	long passthrough_seen_at = 0;
 	bool passthrough_exit = false;
-	bool passthrough_restack = false;
 
 	ps->o.mode = PROGMODE_EXPOSE;
 
@@ -2493,13 +2512,6 @@ mainloop(session_t *ps, bool activate_on_start) {
 #endif
 			Window wid = ev_window(ps, &ev);
 
-			// While the panel switches windows after a click, keep the ones
-			// the window manager raises hidden behind the desktop copy
-			if (mw && passthrough_seen_at
-					&& ((ev.type == ConfigureNotify && !ev.xconfigure.override_redirect)
-					 || (ev.type == MapNotify && !ev.xmap.override_redirect)))
-				passthrough_restack = true;
-
 			if (mw && MotionNotify == ev.type)
 			{
 				// when mouse move within a client window, focus on it
@@ -2691,6 +2703,8 @@ mainloop(session_t *ps, bool activate_on_start) {
 							if (pointer_on_passthrough(mw)) {
 								printfdf(false, "(): click on a passthrough panel");
 								passthrough_seen_at = time_in_millis();
+								passthrough_hide(mw);
+								animating = false;
 							}
 							else
 								mw->passthrough_click = false;
@@ -2750,10 +2764,6 @@ mainloop(session_t *ps, bool activate_on_start) {
 		// as the click would without skippy
 		// Close once the panel activated a window, or shortly after the
 		// click when it did not (e.g. launching an application)
-		if (mw && passthrough_restack) {
-			passthrough_restack_covers(mw);
-			passthrough_restack = false;
-		}
 		if (mw && !die && mw->passthrough_click && passthrough_seen_at
 				&& (mw->passthrough_target
 					|| time_in_millis() - passthrough_seen_at >= 200)) {
