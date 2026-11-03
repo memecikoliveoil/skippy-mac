@@ -163,6 +163,7 @@ backgroundTinting = true
 # option = windowClass to display window class
 # option = windowTitle to display window title
 # position = top, mid or bottom: vertical position of the label
+# emptyText = label shown in the middle when there is no window to show
 [label]
 show = all
 option = windowClass
@@ -177,6 +178,7 @@ opacity = 196
 text = white
 textOutline = #0e0e0e
 font = fixed-11:weight=bold
+emptyText =
 
 [bindings]
 

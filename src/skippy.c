@@ -1562,6 +1562,8 @@ passthrough_app_window(session_t *ps, Window wid) {
 	return valid;
 }
 
+static void empty_notice_hide(MainWin *mw);
+
 /*
  * Get skippy out of sight at once on a click on a passthrough panel, so
  * whatever the window manager does next shows as it would without skippy.
@@ -1579,6 +1581,65 @@ passthrough_hide(MainWin *mw) {
 	foreach_dlist(mw->panels) {
 		clientwin_unmap((ClientWin *) iter->data);
 	}
+	empty_notice_hide(mw);
+	XFlush(ps->dpy);
+}
+
+/*
+ * A label in the middle of the screen when there is no window to show, like
+ * "No Available Windows" in macOS. It looks like the window labels.
+ */
+static Tooltip *empty_notice = NULL;
+
+static void
+empty_notice_hide(MainWin *mw) {
+	if (empty_notice) {
+		tooltip_destroy(empty_notice);
+		empty_notice = NULL;
+	}
+	(void) mw;
+}
+
+static void
+empty_notice_show(MainWin *mw) {
+	session_t *ps = mw->ps;
+	empty_notice_hide(mw);
+
+	int nwindows = 0;
+	foreach_dlist(mw->clientondesktop) {
+		if (((ClientWin *) iter->data)->mode != CLIDISP_NONE)
+			nwindows++;
+	}
+	printfdf(false, "(): %d windows shown, emptyText \"%s\", mode %d",
+			nwindows, ps->o.tooltip_emptyText? ps->o.tooltip_emptyText: "",
+			ps->o.mode);
+	if (!ps->o.tooltip_emptyText || ps->o.mode == PROGMODE_PAGING || nwindows)
+		return;
+
+	empty_notice = tooltip_create(mw);
+	if (!empty_notice)
+		return;
+	Tooltip *tt = empty_notice;
+
+	int len = strlen(ps->o.tooltip_emptyText);
+	tt->text = (FcChar8 *) mstrdup(ps->o.tooltip_emptyText);
+	tt->text_len = len;
+	XftTextExtentsUtf8(ps->dpy, tt->font, tt->text, len, &tt->extents);
+	tt->width = tt->extents.width + 8;
+	tt->height = tt->font_height + 5;
+
+	MonitorCoord *mon = &mw->monitor[mw->active_monitor];
+	XMoveResizeWindow(ps->dpy, tt->window,
+			mon->x + (mon->width - (int) tt->width) / 2,
+			mon->y + (mon->height - (int) tt->height) / 2,
+			tt->width, tt->height);
+
+	// Drawn as a label, shown whatever label/show says
+	int show = ps->o.tooltip_show;
+	ps->o.tooltip_show = TOOLTIP_SHOW_ALL;
+	tooltip_draw(tt, false);
+	ps->o.tooltip_show = show;
+	XRaiseWindow(ps->dpy, tt->window);
 	XFlush(ps->dpy);
 }
 
@@ -2080,6 +2141,7 @@ mainloop(session_t *ps, bool activate_on_start) {
 		// Main window destruction, before poll()
 		if (mw && die) {
 			printfdf(false,"(): selecting/canceling and returning to background");
+			empty_notice_hide(mw);
 
 			animating = false;
 
@@ -2372,6 +2434,7 @@ mainloop(session_t *ps, bool activate_on_start) {
 							clientwin_map(cw);
 					}
 					passthrough_restack_covers(mw);
+					empty_notice_show(mw);
 
 					first_animating = false;
 				}
@@ -2408,6 +2471,7 @@ mainloop(session_t *ps, bool activate_on_start) {
 							clientwin_map(cw);
 					}
 					passthrough_restack_covers(mw);
+					empty_notice_show(mw);
 
 					first_animating = false;
 				}
@@ -2550,8 +2614,12 @@ mainloop(session_t *ps, bool activate_on_start) {
 			}
 			else if (mw && ev.type == DestroyNotify) {
 				printfdf(false, "(): else if (ev.type == DestroyNotify) {");
+				// Close when the last shown window goes away, not on any
+				// window destroyed while there was nothing to show (the
+				// empty notice stays up then)
+				bool had_windows = mw->clientondesktop != NULL;
 				count_and_filter_clients(ps->mainwin);
-				if (!mw->clientondesktop) {
+				if (had_windows && !mw->clientondesktop) {
 					printfdf(false, "(): Last client window destroyed/unmapped, "
 							"exiting.");
 					die = true;
@@ -3890,6 +3958,11 @@ load_config_file(session_t *ps)
         if (passthrough && *passthrough)
             ps->o.panel_passthrough = mstrdup(passthrough);
     }
+    free(ps->o.tooltip_emptyText);
+    {
+        const char *text = config_get(config, "label", "emptyText", "");
+        ps->o.tooltip_emptyText = (text && *text)? mstrdup(text): NULL;
+    }
 
     config_get_bool_wrap(config, "desktop", "show", &ps->o.panel_show_desktop);
     config_get_bool_wrap(config, "desktop", "backgroundTinting", &ps->o.desktopTinting);
@@ -4183,6 +4256,7 @@ main_end:
 			free(ps->o.highlight_tint);
 			free(ps->o.multiselect_tint);
 			free(ps->o.panel_passthrough);
+			free(ps->o.tooltip_emptyText);
 			free(ps->o.tooltip_border);
 			free(ps->o.tooltip_background);
 			free(ps->o.tooltip_backgroundHighlight);

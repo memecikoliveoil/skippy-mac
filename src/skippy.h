@@ -267,6 +267,7 @@ typedef struct {
 	bool panel_reserveSpace;
 	int panel_maxThickness;
 	char *panel_passthrough;
+	char *tooltip_emptyText;
 
 	bool panel_show_desktop;
 	bool desktopTinting;
@@ -364,6 +365,7 @@ typedef struct {
 	.panel_reserveSpace = true, \
 	.panel_maxThickness = 0, \
 	.panel_passthrough = NULL, \
+	.tooltip_emptyText = NULL, \
 \
 	.panel_show_desktop = true, \
 	.desktopTinting = true, \
