@@ -89,6 +89,11 @@ struct _mainwin_t {
 	bool passthrough_click;
 	/* Window the panel activated after the click, from _NET_ACTIVE_WINDOW */
 	Window passthrough_target;
+	/* Client list when shown, to notice windows opened meanwhile */
+	Window *shown_clients;
+	int nshown_clients;
+	/* A window opened while shown: close and leave it in front */
+	Window new_window;
 	bool mapped;
 
 	int nmonitors, active_monitor;

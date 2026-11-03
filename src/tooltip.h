@@ -40,6 +40,8 @@ typedef struct _Tooltip Tooltip;
 
 Tooltip *tooltip_create(MainWin *mw);
 void tooltip_destroy(Tooltip *);
+void tooltip_round(Tooltip *);
+void tooltip_size(Tooltip *);
 void tooltip_map(Tooltip *tt, ClientWin *cw,
 		FcChar8 *text, int len);
 void tooltip_unmap(Tooltip *);

@@ -1432,6 +1432,24 @@ mainwin_cut_passthrough(MainWin *mw) {
 	mw->passthrough_click = false;
 	mw->passthrough_nrects = 0;
 
+	// Remember the windows there are now, to notice ones opened later
+	mw->new_window = None;
+	free(mw->shown_clients);
+	mw->shown_clients = NULL;
+	mw->nshown_clients = 0;
+	{
+		winprop_t prop = wid_get_prop(ps, ps->root,
+				XInternAtom(ps->dpy, "_NET_CLIENT_LIST", False),
+				8192, XA_WINDOW, 32);
+		if (prop.nitems) {
+			mw->shown_clients = allocchk(malloc(prop.nitems * sizeof(Window)));
+			for (unsigned long i = 0; i < prop.nitems; i++)
+				mw->shown_clients[i] = (Window) prop.data32[i];
+			mw->nshown_clients = prop.nitems;
+		}
+		free_winprop(&prop);
+	}
+
 	foreach_dlist(mw->panels) {
 		ClientWin *cw = iter->data;
 		if (!cw->passthrough)
@@ -1625,14 +1643,14 @@ empty_notice_show(MainWin *mw) {
 	tt->text = (FcChar8 *) mstrdup(ps->o.tooltip_emptyText);
 	tt->text_len = len;
 	XftTextExtentsUtf8(ps->dpy, tt->font, tt->text, len, &tt->extents);
-	tt->width = tt->extents.width + 8;
-	tt->height = tt->font_height + 5;
+	tooltip_size(tt);
 
 	MonitorCoord *mon = &mw->monitor[mw->active_monitor];
 	XMoveResizeWindow(ps->dpy, tt->window,
 			mon->x + (mon->width - (int) tt->width) / 2,
 			mon->y + (mon->height - (int) tt->height) / 2,
 			tt->width, tt->height);
+	tooltip_round(tt);
 
 	// Drawn as a label, shown whatever label/show says
 	int show = ps->o.tooltip_show;
@@ -2144,6 +2162,17 @@ mainloop(session_t *ps, bool activate_on_start) {
 			empty_notice_hide(mw);
 
 			animating = false;
+
+			// A window opened while shown: bring it forward once skippy is
+			// gone, instead of going back to the previously active window
+			if (mw->new_window) {
+				passthrough_raised = mw->new_window;
+				passthrough_exit = true;
+				mw->client_to_focus = NULL;
+				mw->refocus = false;
+				mw->passthrough_click = false;
+				mw->new_window = None;
+			}
 
 			// Closing after a click on a passthrough panel (e.g. a dock
 			// icon): keep the window the panel activated in front, or leave
@@ -2737,6 +2766,25 @@ mainloop(session_t *ps, bool activate_on_start) {
 			}
 			else if (mw && ev.type == PropertyNotify
 					&& ev.xproperty.window == ps->root) {
+				// A window opened while skippy is shown (e.g. a screenshot
+				// dialog): close and leave it in front
+				if (ev.xproperty.atom == XInternAtom(ps->dpy, "_NET_CLIENT_LIST", True)
+						&& mw->mapped && !die && !mw->new_window) {
+					winprop_t prop = wid_get_prop(ps, ps->root, ev.xproperty.atom,
+							8192, XA_WINDOW, 32);
+					for (unsigned long i = 0; i < prop.nitems && !mw->new_window; i++) {
+						Window wid2 = (Window) prop.data32[i];
+						bool known = false;
+						for (int k = 0; k < mw->nshown_clients && !known; k++)
+							known = mw->shown_clients[k] == wid2;
+						if (!known && passthrough_app_window(ps, wid2)) {
+							printfdf(false, "(): window %#010lx opened, exiting", wid2);
+							mw->new_window = wid2;
+							die = true;
+						}
+					}
+					free_winprop(&prop);
+				}
 				// The application window a passthrough panel activates
 				if (ev.xproperty.atom == _NET_ACTIVE_WINDOW && mw->mapped
 						&& mw->passthrough_click && !mw->passthrough_target) {
@@ -4000,6 +4048,7 @@ load_config_file(session_t *ps)
     config_get_int_wrap(config, "label", "offsetX", &ps->o.tooltip_offsetX, INT_MIN, INT_MAX);
     config_get_int_wrap(config, "label", "offsetY", &ps->o.tooltip_offsetY, INT_MIN, INT_MAX);
     config_get_double_wrap(config, "label", "width", &ps->o.tooltip_width, 0.0, 1.0);
+    config_get_int_wrap(config, "label", "radius", &ps->o.tooltip_radius, 0, 64);
 	{
 		int old_value = ps->o.tooltip_opacity;
 		config_get_int_wrap(config, "label", "opacity", &ps->o.tooltip_opacity, 0, 256);
