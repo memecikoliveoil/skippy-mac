@@ -67,7 +67,6 @@ tooltip_create(MainWin *mw) {
 	
 	tt->mainwin = mw;
 	tt->window = None;
-	tt->mapped = false;
 	tt->font = 0;
 	tt->draw = 0;
 	tt->text = 0;
@@ -208,6 +207,9 @@ tooltip_map(Tooltip *tt, ClientWin *cw, FcChar8 *text, int len)
 	memcpy(tt->text, text, len);
 	
 	tt->text_len = len;
+	
+	XMapWindow(ps->dpy, tt->window);
+	XRaiseWindow(ps->dpy, tt->window);
 }
 
 // Size the label box around its text. Rounded labels get even padding on
@@ -286,26 +288,10 @@ tooltip_move(Tooltip *tt, ClientWin *cw) {
 	XMoveWindow(tt->mainwin->ps->dpy, tt->window, x, y);
 }
 
-// Map or unmap the label window, only when its state actually changes.
-// A label is raised when it is mapped so that it stays on top of
-// thumbnails mapped after it (e.g. a bottom label overlapping the next row).
-static void
-tooltip_set_visible(Tooltip *tt, bool visible)
-{
-	if (visible == tt->mapped)
-		return;
-
-	if (visible)
-		XMapRaised(tt->mainwin->ps->dpy, tt->window);
-	else
-		XUnmapWindow(tt->mainwin->ps->dpy, tt->window);
-	tt->mapped = visible;
-}
-
 void
 tooltip_unmap(Tooltip *tt)
 {
-	tooltip_set_visible(tt, false);
+	XUnmapWindow(tt->mainwin->ps->dpy, tt->window);
 	if(tt->text)
 		free(tt->text);
 	tt->text = 0;
@@ -316,13 +302,6 @@ void
 tooltip_draw(Tooltip *tt, bool focused)
 {
 	if (!tt || !tt->text)
-		return;
-
-	// label/show decides whether this label is shown at all
-	bool visible = tt->mainwin->ps->o.tooltip_show == TOOLTIP_SHOW_ALL
-		|| (tt->mainwin->ps->o.tooltip_show == TOOLTIP_SHOW_FOCUSED && focused);
-	tooltip_set_visible(tt, visible);
-	if (!visible)
 		return;
 
 	// A square border would be cut off at rounded corners: none then

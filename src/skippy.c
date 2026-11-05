@@ -1652,12 +1652,9 @@ empty_notice_show(MainWin *mw) {
 			tt->width, tt->height);
 	tooltip_round(tt);
 
-	// Drawn as a label, shown whatever label/show says
-	int show = ps->o.tooltip_show;
-	ps->o.tooltip_show = TOOLTIP_SHOW_ALL;
+	// Drawn as a label, whatever label/show says
+	XMapRaised(ps->dpy, tt->window);
 	tooltip_draw(tt, false);
-	ps->o.tooltip_show = show;
-	XRaiseWindow(ps->dpy, tt->window);
 	XFlush(ps->dpy);
 }
 
