@@ -163,9 +163,9 @@ backgroundTinting = true
 # option = windowClass to display window class
 # option = windowTitle to display window title
 # position = top, mid or bottom: vertical position of the label
-# radius = 0
-emptyText = label shown in the middle when there is no window to show
 # radius = corner radius of the label box in pixels (0 = square)
+# padding = space around the text on all sides in pixels (0 = tight)
+# emptyText = label shown in the middle when there is no window to show
 [label]
 show = all
 option = windowClass
@@ -180,6 +180,8 @@ opacity = 196
 text = white
 textOutline = #0e0e0e
 font = fixed-11:weight=bold
+radius = 0
+padding = 0
 emptyText =
 
 [bindings]
