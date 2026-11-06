@@ -35,15 +35,15 @@ emptyText = No Available Windows
 
 When there is no window to show, this text is shown in the middle of the screen as a label, like macOS. Empty by default (off).
 
-### Rounded labels with padding
+### Label padding
 
 ```
 [label]
-radius = 6
+cornerRadius = 6
 padding = 6
 ```
 
-`radius` rounds the corners of the label box; the border is drawn along the curve. `padding` adds even space around the text on all sides and centers it (0 = tight, as upstream).
+`cornerRadius` rounds the corners of the label box; the border is drawn along the curve. `padding` adds even space around the text on all sides and centers it (0 = tight, as upstream).
 
 ### Closes when a new window opens
 
@@ -51,26 +51,25 @@ If a new window is mapped while the exposé is open, skippy closes, so the new w
 
 ### Other changes
 
-- Previews of client-side decorated (CSD) windows are cropped by their `_GTK_FRAME_EXTENTS`, so their invisible shadow margins don't show up as empty borders.
 - Panel geometry is remembered while a panel is auto-hidden.
 - skippy no longer exits when an unrelated window is destroyed while it shows nothing; it exits only when the last shown window goes away.
 - Window capture, focus and layout fixes from Tomas M's pull requests, among them: cached previews for unmapped windows, switch and expose laid out on the current monitor, real focus recency for the first Alt-Tab selection, and a stable merge sort in place of bubble sort.
 
 ## Upstream status
 
-At the time of writing:
+At the time of writing (upstream 0.12.1, 6 Nov 2026):
 
 | Change | Upstream |
 |---|---|
 | Label `show = all / focused / none`, `position = top / mid / bottom` | merged |
 | skip-taskbar / skip-pager in any `_NET_WM_STATE` position | merged (#579) |
-| Rounded labels | open (#581), named `cornerRadius` there |
+| Crop `_GTK_FRAME_EXTENTS` from previews of CSD windows | merged |
+| Panel geometry from the input shape | merged (#565) |
+| Rounded labels (`cornerRadius`) | merged (#581) |
 | Exit only when the last shown window goes away | open |
 | Label padding | planned, after #581 |
 | Tomas M's fixes | his open PRs, #567 merged here |
 | Dock passthrough, `maxThickness`, `emptyText`, close on new window | only in this fork |
-
-When #581 is merged, `radius` here will be renamed to `cornerRadius` to match upstream.
 
 ## Build
 
