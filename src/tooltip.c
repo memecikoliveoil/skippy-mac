@@ -242,7 +242,7 @@ tooltip_row_inset(int y, int h, int r)
 static int
 tooltip_radius(Tooltip *tt)
 {
-	return MAX(0, MIN(tt->mainwin->ps->o.tooltip_radius,
+	return MAX(0, MIN(tt->mainwin->ps->o.tooltip_cornerRadius,
 				(int) MIN(tt->width, tt->height) / 2));
 }
 
