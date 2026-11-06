@@ -1,58 +1,92 @@
-# BREAKING!! Version 0.11.0.1 Chipmunk Expose introduced new compilation and packaging procedure! See https://github.com/felixfung/skippy-xd/pull/552
+# skippy-mac
 
-# DOUBLE BREAKING!! Version 0.12.0 Digimon introduced new compilation and packaging procedure! See https://github.com/felixfung/skippy-xd/pull/560
+A fork of [skippy-xd](https://github.com/felixfung/skippy-xd) by Felix Fung, tuned to feel closer to macOS: an exposé that works together with a real dock, cleaner labels and a few behaviour fixes. Built and used daily on a MacBook Air (mid 2012) running Xubuntu 24.04 with Plank and picom.
 
-Welcome to skippy-xd!
+Everything that is general enough is sent upstream as a pull request first. This fork carries the rest, plus upstream PRs that are still open.
 
-Skippy-xd is a lightweight, window-manager-agnostic window selector on the X server. With skippy-xd, you get live-preview on your alt-tab motions; you get the much coveted expose feature from Mac; you get a handy overview of all your virtual desktops in one glance with paging mode.
+The program, its command (`skippy-xd`) and its config (`~/.config/skippy-xd/skippy-xd.rc`) keep their original names, so existing setups and scripts keep working.
 
-Switch is similar to Alt-Tab:
+## What's different
 
-![](https://github.com/felixfung/skippy-xd-gifs/blob/main/switch.gif)
+### Dock stays real and clickable
 
-Expose is inspired from Mac:
-
-![](https://github.com/felixfung/skippy-xd-gifs/blob/main/expose.gif)
-
-Paging shows you your entire desktop:
-
-![](https://github.com/felixfung/skippy-xd-gifs/blob/main/paging.gif)
-
-If you are looking for a slick and minimalistic window selector that turns every of your little grrrrh throughout the day into a little bit of a yay, skippy-xd may be for you. If you agree with https://github.com/felixfung/skippy-xd/wiki/Skippy-xd-philosophy, then skippy-xd definitely is for you.
-
-Check out the youtube videos:
-
-[![Skippy-xd window selector!](https://img.youtube.com/vi/8zKAgt5mhek/mqdefault.jpg)](https://youtu.be/8zKAgt5mhek)
-[![Skippy-xd window selector!](https://img.youtube.com/vi/6zEvYXWIQyg/mqdefault.jpg)](https://youtu.be/6zEvYXWIQyg)
-[![Skippy-xd invocation methods!!](https://img.youtube.com/vi/sFvG9rcGanA/mqdefault.jpg)](https://youtu.be/sFvG9rcGanA)
-[![Skippy-xd config file!](https://img.youtube.com/vi/Ct2pEx551TQ/mqdefault.jpg)](https://youtu.be/Ct2pEx551TQ)
-[![Skippy-xd window selector pivoting!](https://img.youtube.com/vi/q9MjCVgDo2o/mqdefault.jpg)](https://youtu.be/q9MjCVgDo2o)
-[![Skippy-xd exposé layout algorithm cosmos!](https://img.youtube.com/vi/c6EP6uyj3EA/mqdefault.jpg)](https://youtu.be/c6EP6uyj3EA)
-[![Skippy-xd and tiling managers](https://img.youtube.com/vi/ENnxntTvWY4/mqdefault.jpg)](https://youtu.be/ENnxntTvWY4)
-[![Skippy-xd and tiling managers](https://img.youtube.com/vi/CP2XZazIMlk/mqdefault.jpg)](https://youtu.be/CP2XZazIMlk)
-
-skippy-xd works on anything X. See https://github.com/felixfung/skippy-xd/wiki/Adoption#compatible-desktop-environmentswindow-managers for details.
-
-Installation and usage is simple:
 ```
-git clone https://github.com/felixfung/skippy-xd.git
-cd skippy-xd
-meson setup build --prefix=/usr
+[panel]
+passthrough = plank
+```
+
+Panels whose WM_CLASS matches `passthrough` (same syntax as `--wm-class`) are not drawn as a copy. The real dock stays visible and clickable on top of the exposé, like the Dock during Mission Control. Clicking it closes skippy and the click goes to the dock as usual: open an app, raise its windows, and so on. Works best with `pseudoTrans = false`. Use `show = false` to hide the remaining panels, for example the top panel.
+
+### Limit the reserved panel space
+
+```
+[panel]
+maxThickness = 80
+```
+
+With `reserveSpace = true`, at most this many pixels are reserved per panel (0 = no limit). Useful when a dock window is much taller than what it draws, as with Plank.
+
+### "No Available Windows"
+
+```
+[label]
+emptyText = No Available Windows
+```
+
+When there is no window to show, this text is shown in the middle of the screen as a label, like macOS. Empty by default (off).
+
+### Rounded labels with padding
+
+```
+[label]
+radius = 6
+padding = 6
+```
+
+`radius` rounds the corners of the label box; the border is drawn along the curve. `padding` adds even space around the text on all sides and centers it (0 = tight, as upstream).
+
+### Closes when a new window opens
+
+If a new window is mapped while the exposé is open, skippy closes, so the new window is not hidden behind it.
+
+### Other changes
+
+- Previews of client-side decorated (CSD) windows are cropped by their `_GTK_FRAME_EXTENTS`, so their invisible shadow margins don't show up as empty borders.
+- Panel geometry is remembered while a panel is auto-hidden.
+- skippy no longer exits when an unrelated window is destroyed while it shows nothing; it exits only when the last shown window goes away.
+- Window capture, focus and layout fixes from Tomas M's pull requests, among them: cached previews for unmapped windows, switch and expose laid out on the current monitor, real focus recency for the first Alt-Tab selection, and a stable merge sort in place of bubble sort.
+
+## Upstream status
+
+At the time of writing:
+
+| Change | Upstream |
+|---|---|
+| Label `show = all / focused / none`, `position = top / mid / bottom` | merged |
+| skip-taskbar / skip-pager in any `_NET_WM_STATE` position | merged (#579) |
+| Rounded labels | open (#581), named `cornerRadius` there |
+| Exit only when the last shown window goes away | open |
+| Label padding | planned, after #581 |
+| Tomas M's fixes | his open PRs, #567 merged here |
+| Dock passthrough, `maxThickness`, `emptyText`, close on new window | only in this fork |
+
+When #581 is merged, `radius` here will be renamed to `cornerRadius` to match upstream.
+
+## Build
+
+```
+git clone https://github.com/memecikoliveoil/skippy-mac.git
+cd skippy-mac
+meson setup build --prefix=/usr/local
 meson compile -C build
-meson install -C build
+sudo meson install -C build
 
 skippy-xd --start-daemon
-skippy-xd --switch --next
 skippy-xd --expose
-skippy-xd --paging
 ```
 
-Find the package in your distro https://github.com/felixfung/skippy-xd/wiki/Adoption#distro-adoption, or ready made package in https://github.com/felixfung/skippy-xd/releases/latest.
+For everything else (other options, key bindings, paging, switch mode) see the [upstream README](https://github.com/felixfung/skippy-xd#readme) and [wiki](https://github.com/felixfung/skippy-xd/wiki).
 
-Check the wiki for documentation on basic use https://github.com/felixfung/skippy-xd/wiki/How-to-Use and advanced tips and tricks https://github.com/felixfung/skippy-xd/wiki/Advanced-Uses-and-Special-Set-Ups.
+## Credits
 
-And please! If you share our love for skippy-xd, please do:
-
-* Use it! Nothing is more rewarding to developers than widespread adoption of the app.
-* Share it! Tell others about the app. Showcase screenshots and videos. Package it for your distros.
-* Improve it! Make suggestions on feature improvements. Report bugs and they will be fixed. If you are a coder, start hacking!
+skippy-xd is maintained by [Felix Fung](https://github.com/felixfung), with contributions from many people over the years. Thanks to Felix for the reviews and to Tomas M for his fixes. Licensed under the GPL, like upstream.
