@@ -67,7 +67,7 @@ At the time of writing (upstream 0.12.1, 6 Nov 2026):
 | Panel geometry from the input shape | merged (#565) |
 | Rounded labels (`cornerRadius`) | merged (#581) |
 | Exit only when the last shown window goes away | open |
-| Label padding | planned, after #581 |
+| Label padding | merged (#586), adds to the default spacing there |
 | Tomas M's fixes | his open PRs, #567 merged here |
 | Dock passthrough, `maxThickness`, `emptyText`, close on new window | only in this fork |
 
