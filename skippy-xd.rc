@@ -182,7 +182,6 @@ opacity = 196
 text = white
 textOutline = #0e0e0e
 font = fixed-11:weight=bold
-padding = 0
 emptyText =
 
 [bindings]
