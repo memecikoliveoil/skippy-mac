@@ -52,7 +52,6 @@ If a new window is mapped while the exposé is open, skippy closes, so the new w
 ### Other changes
 
 - Panel geometry is remembered while a panel is auto-hidden.
-- skippy no longer exits when an unrelated window is destroyed while it shows nothing; it exits only when the last shown window goes away.
 - Window capture, focus and layout fixes from Tomas M's pull requests, among them: cached previews for unmapped windows, switch and expose laid out on the current monitor, real focus recency for the first Alt-Tab selection, and a stable merge sort in place of bubble sort.
 
 ## Upstream status
@@ -66,7 +65,7 @@ At the time of writing (upstream 0.12.1, 6 Nov 2026):
 | Crop `_GTK_FRAME_EXTENTS` from previews of CSD windows | merged |
 | Panel geometry from the input shape | merged (#565) |
 | Rounded labels (`cornerRadius`) | merged (#581) |
-| Exit only when the last shown window goes away | open |
+| Exit only when the last shown window goes away | merged (#582) |
 | Label padding | merged (#586), adds to the default spacing there |
 | Tomas M's fixes | his open PRs, #567 merged here |
 | Dock passthrough, `maxThickness`, `emptyText`, close on new window | only in this fork |
