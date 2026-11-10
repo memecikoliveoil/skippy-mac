@@ -17,6 +17,10 @@ passthrough = plank
 
 Panels whose WM_CLASS matches `passthrough` (same syntax as `--wm-class`) are not drawn as a copy. The real dock stays visible and clickable on top of the exposé, like the Dock during Mission Control. Clicking it closes skippy and the click goes to the dock as usual: open an app, raise its windows, and so on. Works best with `pseudoTrans = false`. Use `show = false` to hide the remaining panels, for example the top panel.
 
+The dock sits on skippy's own background: windows behind its transparent parts (Plank's window is much larger than the dock it draws) do not show through, wherever the dock is.
+
+With xfwm4, set `easy_click` to something other than the key that holds switch open (usually Alt), or xfwm4 takes clicks on the dock during Alt-Tab for moving windows: `xfconf-query -c xfwm4 -p /general/easy_click -s Super` (or `none`).
+
 ### Limit the reserved panel space
 
 ```
@@ -51,12 +55,13 @@ If a new window is mapped while the exposé is open, skippy closes, so the new w
 
 ### Other changes
 
+- Windows moved partly off the screen (their middle outside every monitor) are laid out on the nearest monitor instead of being left out with a stale preview.
 - Panel geometry is remembered while a panel is auto-hidden.
 - Window capture, focus and layout fixes from Tomas M's pull requests, among them: cached previews for unmapped windows, switch and expose laid out on the current monitor, real focus recency for the first Alt-Tab selection, and a stable merge sort in place of bubble sort.
 
 ## Upstream status
 
-At the time of writing (upstream 0.12.1, 6 Nov 2026):
+At the time of writing (upstream 0.12.1, 11 Nov 2026):
 
 | Change | Upstream |
 |---|---|
@@ -67,8 +72,9 @@ At the time of writing (upstream 0.12.1, 6 Nov 2026):
 | Rounded labels (`cornerRadius`) | merged (#581) |
 | Exit only when the last shown window goes away | merged (#582) |
 | Label padding | merged (#586), adds to the default spacing there |
+| Windows partly off the screen laid out on the nearest monitor | open PR |
 | Tomas M's fixes | his open PRs, #567 merged here |
-| Dock passthrough, `maxThickness`, `emptyText`, close on new window | only in this fork |
+| Dock passthrough (with its background), `maxThickness`, `emptyText`, close on new window | only in this fork |
 
 ## Build
 
