@@ -988,6 +988,11 @@ clientwin_move(ClientWin *cw, float f, int x, int y, float timeslice)
 	XMoveResizeWindow(cw->mainwin->ps->dpy, cw->mini.window,
 			cw->mini.x, cw->mini.y,
 			cw->mini.width, cw->mini.height);
+	if (timeslice >= 1.0f)
+		printfdf(false, "(): DBG %#010lx src %dx%d+%d+%d gtk l%d t%d -> mini %dx%d+%d+%d",
+				cw->src.window, cw->src.width, cw->src.height, cw->src.x, cw->src.y,
+				cw->gtkframe_l, cw->gtkframe_t,
+				cw->mini.width, cw->mini.height, cw->mini.x, cw->mini.y);
 
 	if (cw->paneltype == WINTYPE_WINDOW)
 		clientwin_round_corners(cw);
