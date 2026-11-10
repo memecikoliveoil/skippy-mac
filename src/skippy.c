@@ -1431,6 +1431,7 @@ mainwin_cut_passthrough(MainWin *mw) {
 	mw->passthrough_target = None;
 	mw->passthrough_click = false;
 	mw->passthrough_nrects = 0;
+	mw->passthrough_ncut = 0;
 
 	// Remember the windows there are now, to notice ones opened later
 	mw->new_window = None;
@@ -1463,6 +1464,8 @@ mainwin_cut_passthrough(MainWin *mw) {
 		};
 		XShapeCombineRectangles(ps->dpy, mw->window, ShapeBounding,
 				0, 0, &shown, 1, ShapeSubtract, Unsorted);
+		if (mw->passthrough_ncut < 4)
+			mw->passthrough_cut[mw->passthrough_ncut++] = shown;
 
 		int px, py, pw, ph;
 		panel_effective_geometry(ps, cw, &px, &py, &pw, &ph);
@@ -1539,6 +1542,38 @@ passthrough_restack_covers(MainWin *mw) {
 	if (!panel)
 		return;
 
+	// The desktop copy may not hide what is behind the panel's transparent
+	// parts (it can be a picture of the screen with the windows on it). Put
+	// skippy's own background right below the panel, only where the main
+	// window is cut out, so the dock sits on the same background as the
+	// rest of skippy, whatever windows are behind it.
+	if (mw->passthrough_ncut > 0 && mw->bg_pixmap) {
+		if (!mw->passthrough_backdrop) {
+			XSetWindowAttributes sattr = {
+				.override_redirect = True,
+				.colormap = mw->colormap,
+				.border_pixel = 0,
+				.background_pixel = 0,
+			};
+			mw->passthrough_backdrop = XCreateWindow(ps->dpy, ps->root,
+					mw->x, mw->y, mw->width, mw->height, 0,
+					mw->depth, InputOutput, mw->visual,
+					CWOverrideRedirect | CWColormap | CWBorderPixel | CWBackPixel,
+					&sattr);
+		}
+		Window bd = mw->passthrough_backdrop;
+		XMoveResizeWindow(ps->dpy, bd, mw->x, mw->y, mw->width, mw->height);
+		XSetWindowBackgroundPixmap(ps->dpy, bd, mw->bg_pixmap);
+		XShapeCombineRectangles(ps->dpy, bd, ShapeBounding, 0, 0,
+				mw->passthrough_cut, mw->passthrough_ncut, ShapeSet, Unsorted);
+		XShapeCombineRectangles(ps->dpy, bd, ShapeInput, 0, 0,
+				NULL, 0, ShapeSet, Unsorted);
+		XWindowChanges bdchanges = { .sibling = panel, .stack_mode = Below };
+		XConfigureWindow(ps->dpy, bd, CWSibling | CWStackMode, &bdchanges);
+		XMapWindow(ps->dpy, bd);
+		XClearWindow(ps->dpy, bd);
+	}
+
 	foreach_dlist(mw->panels) {
 		ClientWin *cover = iter->data;
 		if (cover->paneltype != WINTYPE_DESKTOP)
@@ -1593,6 +1628,8 @@ passthrough_hide(MainWin *mw) {
 	session_t *ps = mw->ps;
 	XShapeCombineRectangles(ps->dpy, mw->window, ShapeBounding,
 			0, 0, NULL, 0, ShapeSet, Unsorted);
+	if (mw->passthrough_backdrop)
+		XUnmapWindow(ps->dpy, mw->passthrough_backdrop);
 	foreach_dlist(mw->clientondesktop) {
 		clientwin_unmap((ClientWin *) iter->data);
 	}

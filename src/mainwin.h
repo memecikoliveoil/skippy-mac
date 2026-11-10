@@ -85,6 +85,11 @@ struct _mainwin_t {
 	/* Area of the passthrough panels taking clicks, root coordinates */
 	XRectangle passthrough_rects[4];
 	int passthrough_nrects;
+	/* Parts of the main window cut out for passthrough panels */
+	XRectangle passthrough_cut[4];
+	int passthrough_ncut;
+	/* Shows skippy's background under passthrough panels */
+	Window passthrough_backdrop;
 	/* A button was pressed on a passthrough panel */
 	bool passthrough_click;
 	/* Window the panel activated after the click, from _NET_ACTIVE_WINDOW */

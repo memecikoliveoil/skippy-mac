@@ -695,6 +695,8 @@ mainwin_unmap(MainWin *mw)
 		mw->bg_pixmap = None;
 	}
 	XUngrabKeyboard(mw->ps->dpy, CurrentTime);
+	if (mw->passthrough_backdrop)
+		XUnmapWindow(mw->ps->dpy, mw->passthrough_backdrop);
 	XUnmapWindow(mw->ps->dpy, mw->window);
 	mw->mapped = false;
 }
