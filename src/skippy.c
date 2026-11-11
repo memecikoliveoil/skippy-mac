@@ -1625,6 +1625,28 @@ passthrough_app_window(session_t *ps, Window wid) {
 	return valid;
 }
 
+/*
+ * A window that skippy would end up under if it stayed (e.g. a control
+ * center or launcher opened by a shortcut as a popup menu or utility
+ * window): the window manager raises it and can push skippy's main window
+ * below the other windows, leaving only the previews on screen.
+ */
+static bool
+new_popup_window(session_t *ps, Window wid) {
+	winprop_t prop = wid_get_prop(ps, wid,
+			XInternAtom(ps->dpy, "_NET_WM_WINDOW_TYPE", False),
+			1, XA_ATOM, 32);
+	bool popup = false;
+	if (prop.nitems) {
+		Atom type = (Atom) prop.data32[0];
+		popup = type == XInternAtom(ps->dpy, "_NET_WM_WINDOW_TYPE_POPUP_MENU", False)
+			|| type == XInternAtom(ps->dpy, "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU", False)
+			|| type == XInternAtom(ps->dpy, "_NET_WM_WINDOW_TYPE_UTILITY", False);
+	}
+	free_winprop(&prop);
+	return popup;
+}
+
 static void empty_notice_hide(MainWin *mw);
 
 /*
@@ -2856,7 +2878,8 @@ mainloop(session_t *ps, bool activate_on_start) {
 						bool known = false;
 						for (int k = 0; k < mw->nshown_clients && !known; k++)
 							known = mw->shown_clients[k] == wid2;
-						if (!known && passthrough_app_window(ps, wid2)) {
+						if (!known && (passthrough_app_window(ps, wid2)
+									|| new_popup_window(ps, wid2))) {
 							printfdf(false, "(): window %#010lx opened, exiting", wid2);
 							mw->new_window = wid2;
 							die = true;
