@@ -695,9 +695,11 @@ mainwin_unmap(MainWin *mw)
 		mw->bg_pixmap = None;
 	}
 	XUngrabKeyboard(mw->ps->dpy, CurrentTime);
+	// Main window first: with the backdrop gone first, the hole cut in the
+	// main window for a dock would show the windows behind it for a moment
+	XUnmapWindow(mw->ps->dpy, mw->window);
 	if (mw->passthrough_backdrop)
 		XUnmapWindow(mw->ps->dpy, mw->passthrough_backdrop);
-	XUnmapWindow(mw->ps->dpy, mw->window);
 	mw->mapped = false;
 }
 

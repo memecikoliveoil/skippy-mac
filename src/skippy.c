@@ -1566,6 +1566,10 @@ passthrough_restack_covers(MainWin *mw) {
 					mw->depth, InputOutput, mw->visual,
 					CWOverrideRedirect | CWColormap | CWBorderPixel | CWBackPixel,
 					&sattr);
+			// Named, so a compositor can leave it out of fading, shadows
+			// and blur (it would show as a band over the windows on exit)
+			wm_wid_set_info(ps, mw->passthrough_backdrop,
+					"skippy-xd backdrop", None);
 		}
 		Window bd = mw->passthrough_backdrop;
 		XMoveResizeWindow(ps->dpy, bd, mw->x, mw->y, mw->width, mw->height);
