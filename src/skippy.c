@@ -2513,7 +2513,9 @@ mainloop(session_t *ps, bool activate_on_start) {
 			// update: with the server grabbed, a compositor cannot paint the
 			// main window alone (background and a lone highlight border)
 			// for a frame before the previews show up
-			if (!mw->mapped && starttime < timeslice && !server_grabbed) {
+			if (!mw->mapped && !server_grabbed
+					&& ((starttime < timeslice && timeslice < stabletime)
+						|| timeslice >= stabletime)) {
 				XGrabServer(ps->dpy);
 				server_grabbed = true;
 			}
