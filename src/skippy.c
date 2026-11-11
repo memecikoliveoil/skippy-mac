@@ -2249,6 +2249,14 @@ mainloop(session_t *ps, bool activate_on_start) {
 			// when we start setting focus on client window
 			mainwin_unmap(mw);
 			foreach_dlist(mw->clientondesktop) { clientwin_unmap((ClientWin *) iter->data); }
+			// A window opened while shown (e.g. a screenshot dialog) makes
+			// the window list be filtered again, so a preview still shown
+			// may be missing from clientondesktop: unmap those too
+			foreach_dlist(mw->clients) {
+				ClientWin *cw = iter->data;
+				if (cw->mapped)
+					clientwin_unmap(cw);
+			}
 			XSync(ps->dpy, False);
 
 			// After a click on a passthrough panel the window manager may
