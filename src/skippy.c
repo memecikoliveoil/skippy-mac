@@ -2160,6 +2160,8 @@ mainloop(session_t *ps, bool activate_on_start) {
 	bool switchdesktop = false;
 	Window passthrough_raised = None;
 	long passthrough_seen_at = 0;
+	// Server grabbed while skippy maps its windows (see below)
+	bool server_grabbed = false;
 	bool passthrough_exit = false;
 
 	ps->o.mode = PROGMODE_EXPOSE;
@@ -2507,6 +2509,14 @@ mainloop(session_t *ps, bool activate_on_start) {
 					stabletime += ps->o.switchWaitDuration;
 				}
 			}
+			// Map the main window, the previews and their borders as one
+			// update: with the server grabbed, a compositor cannot paint the
+			// main window alone (background and a lone highlight border)
+			// for a frame before the previews show up
+			if (!mw->mapped && starttime < timeslice && !server_grabbed) {
+				XGrabServer(ps->dpy);
+				server_grabbed = true;
+			}
 			if (starttime < timeslice && timeslice < stabletime) {
 				if (!mw->mapped) {
 					mainwin_cut_passthrough(mw);
@@ -2640,6 +2650,12 @@ mainloop(session_t *ps, bool activate_on_start) {
 
 				focus_miniw_adv(ps, mw->client_to_focus,
 						ps->o.moveMouse);
+			}
+
+			if (server_grabbed) {
+				XUngrabServer(ps->dpy);
+				XFlush(ps->dpy);
+				server_grabbed = false;
 			}
 
 			if (ps->o.mode != PROGMODE_SWITCH ||
@@ -3018,6 +3034,10 @@ mainloop(session_t *ps, bool activate_on_start) {
 			record_focus(ps->mainwin, wm_get_focused(ps));
 
 		last_rendered = time_in_millis();
+		if (server_grabbed) {
+			XUngrabServer(ps->dpy);
+			server_grabbed = false;
+		}
 		XFlush(ps->dpy);
 
 		// Poll for events
