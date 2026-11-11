@@ -1647,6 +1647,31 @@ new_popup_window(session_t *ps, Window wid) {
 	return popup;
 }
 
+/*
+ * Look for a window opened since skippy was shown, and remember it in
+ * mw->new_window
+ */
+static bool
+find_new_window(MainWin *mw) {
+	session_t *ps = mw->ps;
+	winprop_t prop = wid_get_prop(ps, ps->root,
+			XInternAtom(ps->dpy, "_NET_CLIENT_LIST", False),
+			8192, XA_WINDOW, 32);
+	for (unsigned long i = 0; i < prop.nitems && !mw->new_window; i++) {
+		Window wid = (Window) prop.data32[i];
+		bool known = false;
+		for (int k = 0; k < mw->nshown_clients && !known; k++)
+			known = mw->shown_clients[k] == wid;
+		if (!known && (passthrough_app_window(ps, wid)
+					|| new_popup_window(ps, wid))) {
+			printfdf(false, "(): window %#010lx opened, exiting", wid);
+			mw->new_window = wid;
+		}
+	}
+	free_winprop(&prop);
+	return mw->new_window != None;
+}
+
 static void empty_notice_hide(MainWin *mw);
 
 /*
@@ -2870,23 +2895,9 @@ mainloop(session_t *ps, bool activate_on_start) {
 				// A window opened while skippy is shown (e.g. a screenshot
 				// dialog): close and leave it in front
 				if (ev.xproperty.atom == XInternAtom(ps->dpy, "_NET_CLIENT_LIST", True)
-						&& mw->mapped && !die && !mw->new_window) {
-					winprop_t prop = wid_get_prop(ps, ps->root, ev.xproperty.atom,
-							8192, XA_WINDOW, 32);
-					for (unsigned long i = 0; i < prop.nitems && !mw->new_window; i++) {
-						Window wid2 = (Window) prop.data32[i];
-						bool known = false;
-						for (int k = 0; k < mw->nshown_clients && !known; k++)
-							known = mw->shown_clients[k] == wid2;
-						if (!known && (passthrough_app_window(ps, wid2)
-									|| new_popup_window(ps, wid2))) {
-							printfdf(false, "(): window %#010lx opened, exiting", wid2);
-							mw->new_window = wid2;
-							die = true;
-						}
-					}
-					free_winprop(&prop);
-				}
+						&& mw->mapped && !die && !mw->new_window
+						&& find_new_window(mw))
+					die = true;
 				// The application window a passthrough panel activates
 				if (ev.xproperty.atom == _NET_ACTIVE_WINDOW && mw->mapped
 						&& mw->passthrough_click && !mw->passthrough_target) {
@@ -2990,6 +3001,21 @@ mainloop(session_t *ps, bool activate_on_start) {
 		}
 		if (!mw)
 			passthrough_seen_at = 0;
+
+		// A window that took the focus may be one just opened (e.g. a
+		// control center opened by a shortcut): close for it instead of
+		// taking the focus back, which can make it close itself before
+		// the change of the window list is seen
+		if (mw && !die && !mw->passthrough_click && ps->o.enforceFocus
+				&& !mw->new_window) {
+			Window focus;
+			int revert;
+			XGetInputFocus(ps->dpy, &focus, &revert);
+			if (focus != mw->window && !(mw->client_to_focus
+						&& focus == mw->client_to_focus->mini.window)
+					&& find_new_window(mw))
+				die = true;
+		}
 
 		if (mw && !die && !mw->passthrough_click && ps->o.enforceFocus) {
 			Window focus;
