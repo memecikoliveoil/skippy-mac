@@ -932,9 +932,13 @@ wm_validate_window(session_t *ps, Window wid) {
 	if (ps->o.wm_class) {
 		XClassHint *hints = allocchk(XAllocClassHint());
 		if (hints){
+			// A window without WM_CLASS (or gone meanwhile) leaves these
+			// NULL: match it as an empty class instead of crashing
 			XGetClassHint(ps->dpy, wid, hints);
-			match_result_t class_match = match_expr(ps->o.wm_class, hints->res_class);
-			match_result_t name_match = match_expr(ps->o.wm_class, hints->res_name);
+			match_result_t class_match = match_expr(ps->o.wm_class,
+					hints->res_class? hints->res_class: "");
+			match_result_t name_match = match_expr(ps->o.wm_class,
+					hints->res_name? hints->res_name: "");
 			match_result_t result = {
 				.has_positive = class_match.has_positive || name_match.has_positive,
 				.positive_match = class_match.positive_match || name_match.positive_match,
