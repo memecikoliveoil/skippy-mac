@@ -1215,30 +1215,11 @@ sort_focuslist_cosmos(MainWin *mw, dlist *list)
 	if (mw->nmonitors <= 1)
 		return sort_focuslist_cosmos_region(list);
 
-	// One pass: move each window to the end of its monitor's list
-	dlist **head = calloc(2 * mw->nmonitors, sizeof(dlist *));
-	if (!head)
-		return sort_focuslist_cosmos_region(list);
-	dlist **tail = head + mw->nmonitors;
-	while (list) {
-		dlist *iter = list;
-		list = iter->next;
-		int i = ((ClientWin *) iter->data)->src_monitor;
-		if (i < 0 || i >= mw->nmonitors)
-			i = 0;
-		iter->prev = tail[i];
-		iter->next = NULL;
-		if (tail[i])
-			tail[i]->next = iter;
-		else
-			head[i] = iter;
-		tail[i] = iter;
-	}
-
 	dlist *ordered = NULL;
 	for (int i = 0; i < mw->nmonitors; i++)
-		ordered = dlist_join(ordered, sort_focuslist_cosmos_region(head[i]));
-	free(head);
+		ordered = dlist_join(ordered,
+				sort_focuslist_cosmos_region(clientwin_on_monitor(list, i)));
+	dlist_free(list);
 	return ordered;
 }
 
@@ -2013,7 +1994,6 @@ init_paging_layout(MainWin *mw, Window leader, int monitor)
 				cw->src0.x = cw->src.x + mw->monitor[monitor].x;
 				cw->src0.y = cw->src.y + mw->monitor[monitor].y;
 			}
-			cw->src_monitor = monitor;
 
 			clientwin_prepmove(cw);
 			clientwin_move(cw, multiplier,
@@ -2185,7 +2165,6 @@ skippy_activate(MainWin *mw, Window leader)
 	}
 }
 
-/* Events to drop after skippy exits: everything but map/unmap */
 static Bool
 skippy_drop_event(Display *dpy, XEvent *ev, XPointer arg) {
 	return ev->type != MapNotify && ev->type != UnmapNotify;
@@ -4201,9 +4180,9 @@ load_config_file(session_t *ps)
     ps->o.bindings_keysNext = mstrdup(config_get(config, "bindings", "keysNext", "n"));
     ps->o.bindings_keysCancel = mstrdup(config_get(config, "bindings", "keysCancel", "Escape"));
     ps->o.bindings_keysSelect = mstrdup(config_get(config, "bindings", "keysSelect", "Return space"));
-    ps->o.bindings_keysIconify = mstrdup(config_get(config, "bindings", "keysIconify", "1"));
-    ps->o.bindings_keysShade = mstrdup(config_get(config, "bindings", "keysShade", "2"));
-    ps->o.bindings_keysClose = mstrdup(config_get(config, "bindings", "keysClose", "3"));
+    ps->o.bindings_keysIconify = mstrdup(config_get(config, "bindings", "keysIconify", "Next"));
+    ps->o.bindings_keysShade = mstrdup(config_get(config, "bindings", "keysShade", "Prior"));
+    ps->o.bindings_keysClose = mstrdup(config_get(config, "bindings", "keysClose", "Delete"));
 
     // print an error message for any key bindings that aren't recognized
     check_keysyms(ps->o.config_path, ": [bindings] keysUp =", ps->o.bindings_keysUp);
