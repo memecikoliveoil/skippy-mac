@@ -822,7 +822,6 @@ anime(
 		}
 
 		float multiplier = 1.0 + timeslice * (mtarget - 1.0);
-		mainwin_transform(mw, multiplier);
 
 		dlist *windows = clientwin_on_monitor(mw->clientondesktop, i);
 		foreach_dlist (windows) {
@@ -2806,6 +2805,7 @@ mainloop(session_t *ps, bool activate_on_start) {
 					ClientWin *cw = (ClientWin *) iter->data;
 					clientwin_update3(cw);
 					clientwin_update2(cw);
+					clientwin_transform(cw);
 					cw->damaged = true;
 				}
 				num_events--;
@@ -2819,7 +2819,6 @@ mainloop(session_t *ps, bool activate_on_start) {
 						 && ev_next.type != VisibilityNotify && ev_next.type != ConfigureNotify
 						 && ev_next.type != PropertyNotify && ev_next.type != Expose
 						 && ev_next.type != FocusIn && ev_next.type != FocusOut
-						 && ev_next.type != ReparentNotify
 						 && ev_next.type != UnmapNotify
 						 && ev_next.type != ps->xinfo.damage_ev_base + XDamageNotify)
 							break;
@@ -2835,6 +2834,7 @@ mainloop(session_t *ps, bool activate_on_start) {
 							if (ev_next.type == CreateNotify || ev_next.type == MapNotify) {
 								clientwin_update3(cw);
 								clientwin_update2(cw);
+								clientwin_transform(cw);
 							}
 							cw->damaged = true;
 						}

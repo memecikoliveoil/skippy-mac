@@ -289,6 +289,7 @@ clientwin_create(MainWin *mw, Window client) {
     cw->slots = 0;
 	cw->mainwin = mw;
 	cw->src.window = client;
+	cw->factor = 1;
 	cw->origin = None;
 	cw->destination = None;
 	cw->shadow = None;
@@ -1004,39 +1005,49 @@ clientwin_move(ClientWin *cw, float f, int x, int y, float timeslice)
 }
 
 void
-clientwin_map(ClientWin *cw) {
+clientwin_transform(ClientWin *cw) {
 	session_t *ps = cw->mainwin->ps;
-	
-	if (!cw->mode)
-		return;
 
-	// Shift the window transform past the cropped GTK frame extents.
-	// The offset is in source pixels, so it needs no multiplier.
-	XTransform *transform = &cw->mainwin->transform;
-	transform->matrix[0][2] = XDoubleToFixed(cw->gtkframe_l);
-	transform->matrix[1][2] = XDoubleToFixed(cw->gtkframe_t);
+	XTransform transform;
+	transform.matrix[0][0] = XDoubleToFixed(1.0 / cw->factor);
+	transform.matrix[0][1] = XDoubleToFixed(0);
+	transform.matrix[0][2] = XDoubleToFixed(cw->gtkframe_l);
+	transform.matrix[1][0] = XDoubleToFixed(0);
+	transform.matrix[1][1] = XDoubleToFixed(1.0 / cw->factor);
+	transform.matrix[1][2] = XDoubleToFixed(cw->gtkframe_t);
+	transform.matrix[2][0] = XDoubleToFixed(0);
+	transform.matrix[2][1] = XDoubleToFixed(0);
+	transform.matrix[2][2] = XDoubleToFixed(1.0);
 
 	if (cw->origin) {
 		free_damage(ps, &cw->damage);
 		cw->damage = XDamageCreate(ps->dpy, cw->drawable_id, XDamageReportDeltaRectangles);
 		if (cw->paneltype == WINTYPE_WINDOW)
-			XRenderSetPictureTransform(ps->dpy, cw->origin, transform);
+			XRenderSetPictureTransform(ps->dpy, cw->origin, &transform);
 	}
 
 	if (cw->shadow) {
 		free_damage(ps, &cw->damage);
 		cw->damage = XDamageCreate(ps->dpy, cw->drawable_id, XDamageReportDeltaRectangles);
 		if (cw->paneltype == WINTYPE_WINDOW)
-			XRenderSetPictureTransform(ps->dpy, cw->shadow, transform);
+			XRenderSetPictureTransform(ps->dpy, cw->shadow, &transform);
 	}
+}
 
-	transform->matrix[0][2] = 0;
-	transform->matrix[1][2] = 0;
+void
+clientwin_map(ClientWin *cw) {
+	session_t *ps = cw->mainwin->ps;
 
+	if (!cw->mode)
+		return;
+
+	clientwin_transform(cw);
 	clientwin_render(cw);
 
-	XMapWindow(ps->dpy, cw->mini.window);
-	XRaiseWindow(ps->dpy, cw->mini.window);
+	if (!cw->mapped) {
+		XMapWindow(ps->dpy, cw->mini.window);
+		XRaiseWindow(ps->dpy, cw->mini.window);
+	}
 	cw->mapped = true;
 
 	if (ps->o.tooltip_show && ps->o.mode != PROGMODE_PAGING
