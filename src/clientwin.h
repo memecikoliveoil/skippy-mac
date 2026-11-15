@@ -52,7 +52,6 @@ struct _clientwin_t {
 	Damage damage;
 	float factor;
 
-	uint64_t focus_serial;
 	bool focused;
 	bool multiselect;
 	bool damaged;

@@ -31,7 +31,6 @@ struct _mainwin_t {
 	Colormap colormap;
 	int depth;
 	dlist *clients;
-	uint64_t focus_serial;
 	
 	/// @brief Whether the KeyRelease events should already be acceptable.
 	bool pressed_key;
