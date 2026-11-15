@@ -2819,7 +2819,6 @@ mainloop(session_t *ps, bool activate_on_start) {
 						 && ev_next.type != VisibilityNotify && ev_next.type != ConfigureNotify
 						 && ev_next.type != PropertyNotify && ev_next.type != Expose
 						 && ev_next.type != FocusIn && ev_next.type != FocusOut
-						 && ev_next.type != UnmapNotify
 						 && ev_next.type != ps->xinfo.damage_ev_base + XDamageNotify)
 							break;
 
