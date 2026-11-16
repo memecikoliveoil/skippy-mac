@@ -2,7 +2,7 @@
 
 A fork of [skippy-xd](https://github.com/felixfung/skippy-xd) by Felix Fung, tuned to feel closer to macOS: an exposé that works together with a real dock, cleaner labels and a few behaviour fixes. Built and used daily on a MacBook Air (mid 2012) running Xubuntu 24.04 with Plank and picom.
 
-![skippy-mac exposé with Plank](skippy-mac.gif)
+![skippy-mac exposé with Plank](docs/skippy-mac.gif)
 
 Everything that is general enough is sent upstream as a pull request first, and most of it has been merged. This fork carries the rest and follows upstream closely (currently 0.12.2).
 
@@ -38,6 +38,8 @@ With `reserveSpace = true`, at most this many pixels are reserved per panel (0 =
 [label]
 emptyText = No Available Windows
 ```
+
+![No Available Windows](docs/empty.png)
 
 When there is no window to show, this text is shown in the middle of the screen as a label, like macOS. Empty by default (off).
 
